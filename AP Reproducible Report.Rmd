@@ -1,0 +1,83 @@
+---
+title: "2016-2017 AP Report"
+author: "Jhanelle Adams"
+date: "July 24, 2018"
+output: html_document
+---
+
+```{r setup, include = FALSE}
+
+#install.packages(c('tinytex'))
+#install.packages("kableExtra")
+library(kableExtra)
+library(tidyverse)
+library(knitr)
+library(tinytex)
+library(pander)
+library(reshape2)
+library(stringr)
+library(ggplot2)
+library(Hmisc)
+library(sandwich)
+library(lmtest)
+library(car)
+library(tidyverse)
+library(magrittr)
+library(rlang)
+library(pander)
+library(dplyr)
+library(DBI)
+con <- dbConnect(odbc::odbc(), .connection_string = "driver={SQL Server};server={dwprdsql01}; Database={fcs eim cim}")
+
+
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, fig.align = 'center')
+
+
+#read in data
+ap_score<- read.csv("AP 2016-2017_clean.csv")
+
+```
+
+# Overview 
+## Total AP Exam Participaton
+
+```{r, fig.width = 5, fig.height= 5, echo = FALSE}
+#heat map
+#table underneath with (number of students and percentage of students, add gender)
+#2nd table or bar chart with (name of school, number of students and percentage of students)
+```
+
+## Total AP Exam Participation by Subject
+
+```{r, fig.width = 5, fig.height= 5, echo = FALSE}
+# distribution table (AP Exam, Number of Students, %of Students) - aggregate at district table
+```
+
+## Distribution of Scores
+
+```{r, fig.width = 5, fig.height= 5, echo = FALSE}
+# heat map which shows highest performers
+#table which shows the aggregate percentage of AP scores
+#table which shows the exam score distribution by school ?maybe another viz? stacked bar by school?
+```
+
+## Report by school - repeat for each school
+```{r, fig.width = 5, fig.height= 5, echo = FALSE}
+#School 1
+#table (number % of school of test takers)
+```
+
+```{r, fig.width = 5, fig.height= 5, echo = FALSE}
+#table (number and % of test takers by subject)
+```
+
+```{r, fig.width = 5, fig.height= 5, echo = FALSE}
+#table (exam score distribution) - bar chart - may switch to 2nd
+```
+
+```{r, fig.width = 5, fig.height= 5, echo = FALSE}
+#table (exam score distribution by subject) - stacked bar and table? - maybe split up by domain?
+```
+
+
+
