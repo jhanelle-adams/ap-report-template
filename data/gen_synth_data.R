@@ -67,7 +67,7 @@ grad_adj$perturb_school <- function(x, schid, schl_par = school_list){
 
 # Conduct the simulation
 simlist <- simpop(5000L, seed = 0525212, 
-                  control = sim_control(nschls = 12L, n_cohorts = 4L, 
+                  control = sim_control(nschls = 21L, n_cohorts = 4L, 
                                         assessment_adjustment = assess_adj,
                                         assess_sim_par = assess_sim_par, 
                                         grad_adjustment = grad_adj))
@@ -77,13 +77,22 @@ simlist <- simpop(5000L, seed = 0525212,
 ap_report_cleaner <- function(simlist){
   out_data <- left_join(simlist$demog_master %>% 
                           select(sid, Sex, Race), simlist$stu_year)
-  out_data <- left_join(out_data, simlist$schools %>% select(schid, name, lea_id))
+  # Add school data from Georgia
+  simlist$schools <- bind_cols(simlist$schools, gen_schl_roster())
+  # Select AP school field naems
+  out_data <- left_join(out_data, simlist$schools %>% select(schid, `AI Institution Name`, 
+                                                             `AI Street Address 1`,
+                                                             `AI Street Address 2`, 
+                                                             `AI Street Address 3`, 
+                                                             `AI State`, 
+                                                             `AI Zip Code`))
   out_data <- inner_join(out_data, 
                         simlist$stu_assess %>% 
                           dplyr::select(sid, math_ss, rdg_ss, grade, year))
   out_data <- filter(out_data, grade %in% c("10", "11", "12"))
   out_data <- rename(out_data, SEX = Sex)
-  out_data$SEX <- substr(out_data$SEX, 1, 1)
+  out_data$Sex <- substr(out_data$SEX, 1, 1)
+  out_data$SEX <- NULL
   out_data$Race <-  forcats::fct_expand(out_data$Race, 
                                         "MEXICAN", "PUERTORICAN", 
                                         "HISP_LAT", "NON_HISP_LAT", 
@@ -120,6 +129,7 @@ ap_report_cleaner <- function(simlist){
   added_rows_3 <- sample_frac(added_rows_2, size = 0.25)
   out_data <- bind_rows(out_data, added_rows, 
                         added_rows_2, added_rows_3)
+  rm(added_rows, added_rows_2, added_rows_3)
   
   out_data$`Exam Code` <- gen_ap_exam_codes(out_data$sid)
   out_data$`Exam Grade` <- scale_score_to_ap(sapply(out_data$rdg_ss, 
@@ -129,49 +139,70 @@ ap_report_cleaner <- function(simlist){
   out_data$`Education Level` <- ap_grade_level(out_data$grade)
   
   # Rename
-  out_data <- rename(out_data, AI_CODE = schid)
-  out_data <- rename(out_data, AI_INSTITUTE = name)
-  out_data <- rename(out_data,  DISTRICT_NAME = lea_id)
-  out_data$DISTRICT_NAME <- "AIUR"
-  out_data <- rename(out_data, AP_NUMBER = sid)
+  out_data <- rename(out_data, `AI Code` = schid)
+  out_data$`DISTRICT NAME` <- "AIUR"
+  out_data <- rename(out_data, `AP Number` = sid)
   
-  # TODO: Add schools
+  
+  
+  # TODO: Assign awards
+  out_data <- out_data %>% group_by(`AP Number`, year) %>% 
+    mutate(exams_taken = n(),
+           `Award Type` = "None", 
+           uniq_subj = n_distinct(`Exam Code`), 
+           avg_score = mean(`Exam Grade`), 
+           count_3_or_more = sum(`Exam Grade` >= 3),
+           count_4_or_more = sum(`Exam Grade` >= 4)) 
+  
+  out_data$`Award Type` <- ifelse(out_data$exams_taken >= 3 & 
+                                    out_data$count_3_or_more >=3, "01", out_data$`Award Type`)
+  
+  out_data$`Award Type` <- ifelse(out_data$avg_score >= 3.25 & 
+                               out_data$count_3_or_more >= 4, "02", out_data$`Award Type`)
+  
+  out_data$`Award Type` <- ifelse(out_data$avg_score >= 3.5 & 
+                                    out_data$count_3_or_more >= 5, "03", out_data$`Award Type`)
+  
+  out_data$`Award Type` <- ifelse(out_data$avg_score >= 4 & 
+                                    out_data$count_4_or_more >= 8, "05", out_data$`Award Type`)
+  
+  
   # TODO: Reorder output
   # TODO: Export
   
   # Test reshaping wide
   
   out_data <- select(out_data, names(out_data)[grepl("^[A-Z]{1,3}", names(out_data))])
-  out_data <- out_data %>% group_by(AP_NUMBER, `Admin Year`) %>% 
+  out_data <- out_data %>% group_by(`AP Number`) %>% 
+    arrange(year) %>%
     mutate(Exam_Number = str_pad(as.character(1:n()), width = 2, pad = "0"))
   
   out_data <- as.data.frame(out_data)
-  
-  
+  # out_data$`AP Number` <- as.numeric(out_data$`AP Number`)
   
   # Reshape Wide
-  zzz <- reshape(out_data, direction = "wide", v.names = c("Exam Code", "Exam Grade"), 
-          idvar = c("AP_NUMBER", "SEX", "Race", "AI_CODE", "AI_INSTITUTE", 
-                    "DISTRICT_NAME", "RACE_ETH_", "Education Level", 
-                    "Admin Year", "Award Year"), 
-          timevar = "Exam_Number", sep = " ")
+  out_w <- reshape(out_data, direction = "wide", v.names = c("Exam Code", "Exam Grade",
+                                                           "Award Type",
+                                                           "Admin Year", "Award Year"), 
+                 idvar = c("AP Number"), 
+                 drop = c("year", names(out_data)[3:12], "DISTRICT NAME", 
+                          "Education Level"),
+                 timevar = "Exam_Number", sep = " ")
+  out_data_ids <- out_data %>% select(2:12, `Education Level`, `DISTRICT NAME`) %>% distinct()
   
+  out_data <- left_join(out_data_ids, out_w)
   
-  out_data %>% group_by(sid, year) %>% 
-    mutate(distinct = n()) %>% pull(distinct) %>% table
-  
-  # 1 = "Y"
-  # 0 = "N"
-  
-  # Derive race
-  
-  # School Code and name
-  
-  
-  
+  out_data <- out_data %>% select(`AP Number`, `Sex`, `Education Level`, 
+                                  starts_with("Award Type"), 
+                                  starts_with("AI Street Address"), 
+                                  starts_with("AI State"), 
+                                  starts_with("AI Zip"), 
+                                  everything())
   
   return(out_data)
 }
 
 
 out_data <- ap_report_cleaner(simlist)
+
+write.csv(out_data, file = "data/synthetic_ap.csv", row.names = FALSE)
