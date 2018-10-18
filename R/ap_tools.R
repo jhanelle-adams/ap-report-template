@@ -38,6 +38,8 @@ ap_grade_level <- function(x) {
   return(y)
 }
 
+
+
 ap_award_type <- function(x) {
   y <- as.character(x)
   y[y == "01"] <- "AP Scholar"
@@ -107,6 +109,21 @@ ap_exam_codes <- function(x) {
   return(y)
 }
 
+gen_ap_exam_codes <- function(x) {
+  all_codes <- c("07", "13", "14", "15", "16", "20", "22", "23", "25", "28", 
+                 "31", "33", "34", "35", "36", "37", "40", "43", "48", "51", 
+                 "53", "55", "57", "58", "60", "61", "62", "64", "66", "68", 
+                 "69", "75", "76", "77", "80", "82", "78", "83", "84", "85", 
+                 "87", "89", "90", "93")
+  code_probs <- c(0.15, 0.01, 0.005, 0.005, 0.005, 0.1, 0.0005, 0.0005, 0.04, 0.001, 
+                  0.03, 0.00, 0.03, 0.03, 0.15, 0.05, 0.03, 0.04, 0.00, 0.01, 
+                  0.01, 0.01, 0.1, 0.001, 0.01, 0.000, 0.005, 0.005, 0.1, 
+                  0.02, 0.001, 0.06, 0.03, 0.001, 0.01, 0.01, 0.00, 0.1, 0.05, 0.05, 
+                  0.1, 0.03, 0.1, 0.1)
+  N <- length(x)
+  sample(all_codes, N, replace = TRUE, prob = code_probs)
+}
+
 
 compute_subscores <- function(x, scale = c(15L, 40L, 8L)) { 
   examp_score_40 <- round(rnorm(10000, 20, 5.25), 0)
@@ -147,7 +164,26 @@ compute_subscores <- function(x, scale = c(15L, 40L, 8L)) {
 }
 
 fuzz_score <- function(x, fuzz) {
-  samp_seq <- seq(x - fuzz, x + fuzz, by = 1)
-  x <- sample(samp_seq, 1)
-  return(x)
+  if (is.na(x)) {
+    return(NA)
+  } else {
+    samp_seq <- seq(x - fuzz, x + fuzz, by = 1)
+    x <- sample(samp_seq, 1)
+    return(x)
+  }
 }
+
+scale_score_to_ap <- function(x) {
+  # https://apscore.collegeboard.org/scores/about-ap-scores/score-distributions/
+  samp_score_avg <- sample(5:1, 10000, replace = TRUE, 
+                           prob = c(0.17, 0.25, 0.25, 0.2, 0.13))
+  
+  rx <- equate::freqtab(samp_score_avg)
+  ry <- equate::freqtab(round(x, digits = 0))
+  ## Equate the new score with the simulated SAT score
+  zzz <- equate::equate(ry, rx, type = "equipercentile", boot = TRUE, reps = 5)
+  new_score <- equate::equate(x, y = zzz)
+  new_score <- round(new_score, digits = 0)
+  return(new_score)
+}
+

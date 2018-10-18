@@ -78,7 +78,9 @@ ap_report_cleaner <- function(simlist){
   out_data <- left_join(simlist$demog_master %>% 
                           select(sid, Sex, Race), simlist$stu_year)
   out_data <- left_join(out_data, simlist$schools %>% select(schid, name, lea_id))
-  out_data <- left_join(out_data, simlist$stu_assess %>% dplyr::select(sid, math_ss, rdg_ss))
+  out_data <- inner_join(out_data, 
+                        simlist$stu_assess %>% 
+                          dplyr::select(sid, math_ss, rdg_ss, grade, year))
   out_data <- filter(out_data, grade %in% c("10", "11", "12"))
   out_data <- rename(out_data, SEX = Sex)
   out_data$SEX <- substr(out_data$SEX, 1, 1)
@@ -104,38 +106,70 @@ ap_report_cleaner <- function(simlist){
   out_data$Race <- forcats::fct_drop(out_data$Race)
   
   out_data$RACE_ETH_ <- out_data$Race
+  
+  # We need to add some duplication in here for students taking multiple 
+  # assessments
+  added_rows <- sample_frac(out_data, size = 0.1)
+  out_data <- bind_rows(out_data, added_rows)
+  # And repeat (to draw a new sample)
+  added_rows <- sample_frac(out_data, size = 0.05)
+  out_data <- bind_rows(out_data, added_rows)
+  # Add some truly many test takers
+  added_rows <- sample_frac(out_data, size = 0.05)
+  added_rows_2 <- sample_frac(added_rows, size = 0.8)
+  added_rows_3 <- sample_frac(added_rows_2, size = 0.25)
+  out_data <- bind_rows(out_data, added_rows, 
+                        added_rows_2, added_rows_3)
+  
+  out_data$`Exam Code` <- gen_ap_exam_codes(out_data$sid)
+  out_data$`Exam Grade` <- scale_score_to_ap(sapply(out_data$rdg_ss, 
+                                                    fuzz_score, fuzz = 20))
+  out_data$`Admin Year` <- out_data$year - 2000
+  out_data$`Award Year` <- out_data$year - 2000
+  out_data$`Education Level` <- ap_grade_level(out_data$grade)
+  
+  # Rename
+  out_data <- rename(out_data, AI_CODE = schid)
+  out_data <- rename(out_data, AI_INSTITUTE = name)
+  out_data <- rename(out_data,  DISTRICT_NAME = lea_id)
+  out_data$DISTRICT_NAME <- "AIUR"
+  out_data <- rename(out_data, AP_NUMBER = sid)
+  
+  # TODO: Add schools
+  # TODO: Reorder output
+  # TODO: Export
+  
+  # Test reshaping wide
+  
+  out_data <- select(out_data, names(out_data)[grepl("^[A-Z]{1,3}", names(out_data))])
+  out_data <- out_data %>% group_by(AP_NUMBER, `Admin Year`) %>% 
+    mutate(Exam_Number = str_pad(as.character(1:n()), width = 2, pad = "0"))
+  
+  out_data <- as.data.frame(out_data)
+  
+  
+  
+  # Reshape Wide
+  zzz <- reshape(out_data, direction = "wide", v.names = c("Exam Code", "Exam Grade"), 
+          idvar = c("AP_NUMBER", "SEX", "Race", "AI_CODE", "AI_INSTITUTE", 
+                    "DISTRICT_NAME", "RACE_ETH_", "Education Level", 
+                    "Admin Year", "Award Year"), 
+          timevar = "Exam_Number", sep = " ")
+  
+  
+  out_data %>% group_by(sid, year) %>% 
+    mutate(distinct = n()) %>% pull(distinct) %>% table
+  
   # 1 = "Y"
   # 0 = "N"
-  dummyvars <- as.data.frame(model.matrix(~0 + RACE_ETH_, data = out_data))
-  dummyvars <- as.data.frame(apply(dummyvars, 2, code_yn))
-  
-  out_data <- bind_cols(out_data, dummyvars)
-  out_data$Race <- NULL
   
   # Derive race
   
   # School Code and name
-  out_data <- rename(out_data, AI_CODE = schid)
-  out_data <- rename(out_data, AI_NAME = name)
-  out_data <- rename(out_data,  DISTRICT_NAME = lea_id)
-  out_data$DISTRICT_NAME <- "AIUR"
-  out_data <- rename(out_data, SECONDARY_ID = sid)
   
-  # Projected Grad Date
-  out_data$PROJ_GRAD_DATE <- paste0(out_data$cohort_grad_year, "-05")
-  # LATEST_ASSESSMENT_DATE = M-DD-YYYY
-  # LATEST_GRADE_LEVEL = integer
-  # LATEST_REVISED = blank
-  out_data$LATEST_ASSESSMENT_DATE <- paste0("3-22-", out_data$cohort_grad_year - 1)
-  out_data$LATEST_GRADE_LEVEL <- 11
-  out_data$LATEST_REVISED <- ""
   
-  # Derive scores
-  # LATEST_SAT_TOTAL = 400-1600
-  # LATEST_SAT_EBRW = reading score 200-800
-  # LATEST_SAT_MATH_SECTION = 200-800
-  # Select only data with all_caps
-  out_data <- select(out_data, names(out_data)[grepl("^[A-Z]{2,3}", names(out_data))])
+  
+  
   return(out_data)
 }
 
